@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Chatbot Knowledge Builder",
+  "version": "1.0",
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "activeTab",
+    "notifications",
+    "tabs"
+  ],
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": "icon48.png",
+    "default_popup": "popup.html"
+  }
+}

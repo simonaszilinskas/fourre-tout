@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="58" fill="#2196f3"/>
+  
+  <!-- Chat bubble -->
+  <path d="M90 53c0-14.36-11.64-26-26-26S38 38.64 38 53c0 7.83 3.48 14.85 8.95 19.6L42 84h10.95l5.95-5.95L64 81.12l3.9-3.87L73.05 84H84l-4.95-11.4C84.52 67.85 90 60.83 90 53z" 
+        fill="white"/>
+  
+  <!-- Knowledge dots -->
+  <circle cx="55" cy="53" r="4" fill="#2196f3"/>
+  <circle cx="64" cy="53" r="4" fill="#2196f3"/>
+  <circle cx="73" cy="53" r="4" fill="#2196f3"/>
+</svg>
