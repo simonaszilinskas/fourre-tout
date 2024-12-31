@@ -1,5 +1,6 @@
-// background.js
+// src/background.js
 import KnowledgeService from './knowledge-service.js';
+import SecureStorageService from './secure-storage.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({

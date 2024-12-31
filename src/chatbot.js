@@ -1,29 +1,71 @@
-// chatbot.js
-import KnowledgeService from './knowledge-service.js';
+// src/chatbot.js
+import { OpenAIProvider, WebLLMProvider } from './llm-provider.js';
 import SecureStorageService from './secure-storage.js';
+import KnowledgeService from './knowledge-service.js';
 
 class Chatbot {
   constructor() {
+    this.provider = null;
     this.retryCount = 3;
-    this.retryDelay = 1000; // 1 second
+    this.retryDelay = 1000;
+  }
+  
+  async initialize(providerType = 'openai', config = {}) {
+    try {
+      // Cleanup existing provider if any
+      if (this.provider) {
+        await this.provider.cleanup();
+      }
+      
+      // Create new provider
+      switch (providerType.toLowerCase()) {
+        case 'openai':
+          this.provider = new OpenAIProvider(config);
+          break;
+        case 'webllm':
+          this.provider = new WebLLMProvider(config);
+          break;
+        default:
+          throw new Error(`Unknown provider type: ${providerType}`);
+      }
+      
+      // Initialize the provider
+      await this.provider.initialize();
+      
+    } catch (error) {
+      console.error('Chatbot initialization error:', error);
+      throw this.handleError(error);
+    }
   }
   
   async generateResponse(query) {
     try {
+      if (!this.provider) {
+        throw new Error('Chatbot not initialized');
+      }
+
       // Find relevant knowledge with retries
       const relevantKnowledge = await this.withRetry(
         () => KnowledgeService.searchKnowledge(query)
       );
       
-      // Get API key
-      const apiKey = await SecureStorageService.getApiKey();
-      if (!apiKey) {
-        throw new Error('Please set your OpenAI API key in the extension settings.');
-      }
+      // Prepare messages
+      const messages = [
+        { 
+          role: "system", 
+          content: "You are a helpful AI assistant. Use the provided context to answer questions accurately and concisely. If the context doesn't contain relevant information, say so." 
+        },
+        {
+          role: "user",
+          content: `Context:\n${relevantKnowledge.map(k => 
+            `Source (${k.title}): ${k.text}`
+          ).join('\n\n')}\n\nQuestion: ${query}`
+        }
+      ];
 
       // Generate response with retries
       const response = await this.withRetry(
-        () => this.callOpenAI(query, relevantKnowledge, apiKey)
+        () => this.provider.generateResponse(messages)
       );
 
       return {
@@ -38,38 +80,6 @@ class Chatbot {
       console.error('Error in generateResponse:', error);
       throw this.handleError(error);
     }
-  }
-  
-  async callOpenAI(query, relevantKnowledge, apiKey) {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are a helpful assistant. Use the provided context to answer questions accurately and concisely. If the context doesn't contain relevant information, say so."
-          },
-          {
-            role: "user",
-            content: `Context:\n${relevantKnowledge.map(k => 
-              `Source (${k.title}): ${k.text}`
-            ).join('\n\n')}\n\nQuestion: ${query}`
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'OpenAI API error');
-    }
-
-    return await response.json();
   }
   
   async withRetry(operation) {
@@ -97,7 +107,9 @@ class Chatbot {
       'API key not found': 'Please set your OpenAI API key in the extension settings.',
       'Unauthorized': 'Invalid API key. Please check your settings.',
       'insufficient_quota': 'OpenAI API quota exceeded. Please check your billing.',
-      'Rate limit': 'Too many requests. Please try again in a moment.'
+      'Rate limit': 'Too many requests. Please try again in a moment.',
+      'WebLLM not initialized': 'Local model not loaded. Please wait for initialization to complete.',
+      'Failed to initialize WebLLM': 'Failed to load local model. Please check your browser supports WebGPU.'
     };
 
     // Find matching error message or use generic one
