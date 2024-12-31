@@ -4,69 +4,82 @@ import SecureStorageService from './secure-storage.js';
 import KnowledgeService from './knowledge-service.js';
 
 class Chatbot {
-  constructor() {
+  constructor(config = {}) {
     this.provider = null;
-    this.retryCount = 3;
-    this.retryDelay = 1000;
+    this.config = {
+      maxRetries: 3,
+      baseRetryDelay: 1000,
+      maxRetryDelay: 10000,
+      timeout: 30000,
+      ...config
+    };
+
+    this.conversationHistory = [];
+    this.isInitialized = false;
   }
-  
-  async initialize(providerType = 'openai', config = {}) {
+
+  // Initialize chatbot with specified provider
+  async initialize(providerType = 'openai', providerConfig = {}) {
     try {
       // Cleanup existing provider if any
       if (this.provider) {
         await this.provider.cleanup();
       }
-      
+
       // Create new provider
       switch (providerType.toLowerCase()) {
         case 'openai':
-          this.provider = new OpenAIProvider(config);
+          this.provider = new OpenAIProvider(providerConfig);
           break;
         case 'webllm':
-          this.provider = new WebLLMProvider(config);
+          this.provider = new WebLLMProvider(providerConfig);
           break;
         default:
           throw new Error(`Unknown provider type: ${providerType}`);
       }
-      
-      // Initialize the provider
-      await this.provider.initialize();
-      
+
+      // Initialize with timeout
+      await this.withTimeout(
+        this.provider.initialize(),
+        this.config.timeout,
+        'Provider initialization timed out'
+      );
+
+      this.isInitialized = true;
+      console.log('Chatbot initialized successfully');
     } catch (error) {
       console.error('Chatbot initialization error:', error);
+      this.isInitialized = false;
       throw this.handleError(error);
     }
   }
-  
-  async generateResponse(query) {
-    try {
-      if (!this.provider) {
-        throw new Error('Chatbot not initialized');
-      }
 
+  // Generate response with retries and error handling
+  async generateResponse(query) {
+    if (!this.isInitialized) {
+      throw new Error('Chatbot not initialized');
+    }
+
+    try {
       // Find relevant knowledge with retries
       const relevantKnowledge = await this.withRetry(
         () => KnowledgeService.searchKnowledge(query)
       );
-      
-      // Prepare messages
-      const messages = [
-        { 
-          role: "system", 
-          content: "You are a helpful AI assistant. Use the provided context to answer questions accurately and concisely. If the context doesn't contain relevant information, say so." 
-        },
-        {
-          role: "user",
-          content: `Context:\n${relevantKnowledge.map(k => 
-            `Source (${k.title}): ${k.text}`
-          ).join('\n\n')}\n\nQuestion: ${query}`
-        }
-      ];
 
-      // Generate response with retries
-      const response = await this.withRetry(
-        () => this.provider.generateResponse(messages)
-      );
+      // Prepare conversation context
+      const messages = this.prepareMessages(query, relevantKnowledge);
+
+      // Generate response with retries and timeout
+      const response = await this.withRetry(async () => {
+        return await this.withTimeout(
+          this.provider.generateResponse(messages),
+          this.config.timeout,
+          'Response generation timed out'
+        );
+      });
+
+      // Update conversation history
+      this.updateConversationHistory(query, response, relevantKnowledge);
 
       return {
         response: response.choices[0].message.content,
@@ -81,49 +94,102 @@ class Chatbot {
       throw this.handleError(error);
     }
   }
-  
+
+  // Prepare messages with context and history
+  prepareMessages(query, relevantKnowledge) {
+    const systemMessage = {
+      role: "system",
+      content: "You are a helpful AI assistant. Use the provided context to answer questions accurately and concisely. If the context doesn't contain relevant information, say so."
+    };
+
+    const contextMessage = {
+      role: "user",
+      content: `Context:\n${relevantKnowledge.map(k => `Source (${k.title}): ${k.text}`).join('\n\n')}\n\nQuestion: ${query}`
+    };
+
+    return [
+      systemMessage,
+      ...this.getRecentHistory(),
+      contextMessage
+    ];
+  }
+
+  getRecentHistory(limit = 5) {
+    return this.conversationHistory
+      .slice(-limit * 2)
+      .map(({ role, content }) => ({ role, content }));
+  }
+
+  updateConversationHistory(query, response, knowledgeUsed) {
+    this.conversationHistory.push(
+      { role: 'user', content: query },
+      { 
+        role: 'assistant',
+        content: response.choices[0].message.content,
+        knowledge: knowledgeUsed
+      }
+    );
+
+    if (this.conversationHistory.length > 100) {
+      this.conversationHistory = this.conversationHistory.slice(-100);
+    }
+  }
+
+  async withTimeout(promise, timeoutMs, message) {
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    });
+
+    return Promise.race([promise, timeoutPromise]);
+  }
+
   async withRetry(operation) {
     let lastError;
-    
-    for (let i = 0; i < this.retryCount; i++) {
+    let delay = this.config.baseRetryDelay;
+
+    for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
       try {
         return await operation();
       } catch (error) {
         lastError = error;
-        if (i < this.retryCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
-          this.retryDelay *= 2; // Exponential backoff
+
+        if (!this.isRetryableError(error) || attempt === this.config.maxRetries) {
+          throw error;
         }
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay = Math.min(
+          delay * 2 * (0.5 + Math.random()),
+          this.config.maxRetryDelay
+        );
       }
     }
-    
+
     throw lastError;
   }
-  
+
+  isRetryableError(error) {
+    const retryableErrors = [
+      'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'NETWORK_ERROR', 'Rate limit', '429', '503', '504'
+    ];
+
+    return retryableErrors.some(e =>
+      error.message?.includes(e) || error.code?.includes(e)
+    );
+  }
+
   handleError(error) {
-    // Map error types to user-friendly messages
     const errorMessages = {
       'Failed to fetch': 'Network error. Please check your internet connection.',
-      'API key not found': 'Please set your OpenAI API key in the extension settings.',
-      'Unauthorized': 'Invalid API key. Please check your settings.',
-      'insufficient_quota': 'OpenAI API quota exceeded. Please check your billing.',
-      'Rate limit': 'Too many requests. Please try again in a moment.',
-      'WebLLM not initialized': 'Local model not loaded. Please wait for initialization to complete.',
-      'Failed to initialize WebLLM': 'Failed to load local model. Please check your browser supports WebGPU.'
+      'API key not found': 'Please set your OpenAI API key.',
+      'Unauthorized': 'Invalid API key. Check your settings.',
+      'Rate limit': 'Too many requests. Try again later.',
+      'timed out': 'Operation timed out. Please retry.'
     };
 
-    // Find matching error message or use generic one
     const message = Object.entries(errorMessages).find(
-      ([key]) => error.message.includes(key)
-    )?.[1] || 'An unexpected error occurred. Please try again.';
-
-    // Report error to background script for notification
-    chrome.runtime.sendMessage({
-      type: "report_error",
-      error: message
-    }).catch(() => {
-      // Ignore error if background script isn't ready
-    });
+      ([key]) => error.message?.includes(key)
+    )?.[1] || 'An unexpected error occurred.';
 
     return new Error(message);
   }

@@ -213,8 +213,22 @@
       background: #f5f5f5;
       color: #f44336;
     }
+    .debug-info {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #f5f5f5;
+      padding: 5px;
+      font-size: 10px;
+      border-top: 1px solid #ccc;
+      display: none;
+    }
+
+    .debug-info.show {
+      display: block;
+    }
   </style>
-</head>
 </head>
 <body>
   <div class="container">
@@ -247,9 +261,6 @@
             <option value="webllm">WebLLM (Local)</option>
           </select>
           <div id="modelStatus" class="model-status"></div>
-          <div id="progressBar" class="progress-bar">
-            <div id="progressBarFill" class="progress-bar-fill"></div>
-          </div>
         </div>
         
         <div id="openaiSettings" class="settings-section">
@@ -258,7 +269,7 @@
           <button id="saveApiKey" class="settings-button">Save API Key</button>
           <p class="settings-help">Your API key is stored locally and is only used to generate embeddings and responses.</p>
         </div>
-        
+
         <div id="webllmSettings" class="settings-section" style="display: none;">
           <h3>WebLLM Settings</h3>
           <select id="modelSelect" class="provider-select">
@@ -270,12 +281,26 @@
             <button id="downloadModel" class="settings-button">Download Model</button>
             <span id="modelSize" class="model-size"></span>
           </div>
+          <div id="progressBar" class="progress-bar">
+            <div id="progressBarFill" class="progress-bar-fill"></div>
+          </div>
           <p class="settings-help">Choose a model and click download to use it locally.</p>
         </div>
       </div>
     </div>
   </div>
 
-  <script src="dist/popup-bundle.js" type="module"></script>
+  <div id="debugInfo" class="debug-info"></div>
+
+  <!-- Load debug first -->
+  <script src="dist/debug.js"></script>
+  
+  <!-- Then load other dependencies -->
+  <script src="dist/vendors.js"></script>
+  <script src="dist/chatbot.js"></script>
+  
+  <!-- Finally load the popup handler -->
+  <script src="dist/popup.js"></script>
+
 </body>
 </html>
