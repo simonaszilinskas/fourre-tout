@@ -9,12 +9,19 @@
     "notifications",
     "tabs"
   ],
+  "host_permissions": [
+    "https://api.openai.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "icons": {
     "48": "icon48.png",
     "128": "icon128.png"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_icon": "icon48.png",

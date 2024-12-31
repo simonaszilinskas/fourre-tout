@@ -1,128 +1,120 @@
-async function getEmbedding(text) {
-  try {
-    // Get API key from storage
-    const result = await chrome.storage.local.get('openai_api_key');
-    const API_KEY = result.openai_api_key;
-    
-    if (!API_KEY) {
-      throw new Error('OpenAI API key not found. Please set it in the extension settings.');
-    }
-
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        input: text,
-        model: "text-embedding-ada-002"
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to generate embedding');
-    }
-
-    const data = await response.json();
-    return data.data[0].embedding;
-  } catch (error) {
-    console.error('Error generating embedding:', error);
-    throw error;
-  }
-}
+// chatbot.js
+import KnowledgeService from './knowledge-service.js';
+import SecureStorageService from './secure-storage.js';
 
 class Chatbot {
   constructor() {
-    this.vectors = [];
-    this.loadVectors();
-  }
-  
-  async loadVectors() {
-    const result = await chrome.storage.local.get('vectors');
-    this.vectors = result.vectors || [];
-  }
-  
-  async findRelevantKnowledge(query) {
-    try {
-      const queryEmbedding = await getEmbedding(query);
-      
-      // Calculate cosine similarity with stored vectors
-      const similarities = this.vectors.map(vector => ({
-        text: vector.text,
-        similarity: this.cosineSimilarity(queryEmbedding, vector.embedding)
-      }));
-      
-      // Sort by similarity and return top results
-      return similarities
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, 3)
-        .map(item => item.text);
-    } catch (error) {
-      console.error('Error finding relevant knowledge:', error);
-      return [];
-    }
-  }
-  
-  cosineSimilarity(vecA, vecB) {
-    const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
-    const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
-    const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
-    return dotProduct / (magnitudeA * magnitudeB);
+    this.retryCount = 3;
+    this.retryDelay = 1000; // 1 second
   }
   
   async generateResponse(query) {
     try {
-      const relevantKnowledge = await this.findRelevantKnowledge(query);
+      // Find relevant knowledge with retries
+      const relevantKnowledge = await this.withRetry(
+        () => KnowledgeService.searchKnowledge(query)
+      );
       
-      // Get API key from storage
-      const result = await chrome.storage.local.get('openai_api_key');
-      const API_KEY = result.openai_api_key;
-      
-      if (!API_KEY) {
-        return {
-          response: "Please set your OpenAI API key in the extension settings.",
-          sources: []
-        };
+      // Get API key
+      const apiKey = await SecureStorageService.getApiKey();
+      if (!apiKey) {
+        throw new Error('Please set your OpenAI API key in the extension settings.');
       }
 
-      // Use OpenAI API to generate response
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "system",
-              content: "You are a helpful assistant. Use the provided context to answer questions accurately and concisely."
-            },
-            {
-              role: "user",
-              content: `Context: ${relevantKnowledge.join('\n\n')}\n\nQuery: ${query}`
-            }
-          ]
-        })
-      });
+      // Generate response with retries
+      const response = await this.withRetry(
+        () => this.callOpenAI(query, relevantKnowledge, apiKey)
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to generate response');
-      }
-
-      const data = await response.json();
       return {
-        response: data.choices[0].message.content,
-        sources: relevantKnowledge
+        response: response.choices[0].message.content,
+        sources: relevantKnowledge.map(k => ({
+          text: k.text.substring(0, 100) + '...',
+          url: k.url,
+          title: k.title
+        }))
       };
     } catch (error) {
-      console.error('Error generating response:', error);
-      return {
-        response: "Sorry, there was an error generating the response. Please try again.",
-        sources: []
-      };
+      console.error('Error in generateResponse:', error);
+      throw this.handleError(error);
     }
   }
+  
+  async callOpenAI(query, relevantKnowledge, apiKey) {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant. Use the provided context to answer questions accurately and concisely. If the context doesn't contain relevant information, say so."
+          },
+          {
+            role: "user",
+            content: `Context:\n${relevantKnowledge.map(k => 
+              `Source (${k.title}): ${k.text}`
+            ).join('\n\n')}\n\nQuestion: ${query}`
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'OpenAI API error');
+    }
+
+    return await response.json();
+  }
+  
+  async withRetry(operation) {
+    let lastError;
+    
+    for (let i = 0; i < this.retryCount; i++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (i < this.retryCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+          this.retryDelay *= 2; // Exponential backoff
+        }
+      }
+    }
+    
+    throw lastError;
+  }
+  
+  handleError(error) {
+    // Map error types to user-friendly messages
+    const errorMessages = {
+      'Failed to fetch': 'Network error. Please check your internet connection.',
+      'API key not found': 'Please set your OpenAI API key in the extension settings.',
+      'Unauthorized': 'Invalid API key. Please check your settings.',
+      'insufficient_quota': 'OpenAI API quota exceeded. Please check your billing.',
+      'Rate limit': 'Too many requests. Please try again in a moment.'
+    };
+
+    // Find matching error message or use generic one
+    const message = Object.entries(errorMessages).find(
+      ([key]) => error.message.includes(key)
+    )?.[1] || 'An unexpected error occurred. Please try again.';
+
+    // Report error to background script for notification
+    chrome.runtime.sendMessage({
+      type: "report_error",
+      error: message
+    }).catch(() => {
+      // Ignore error if background script isn't ready
+    });
+
+    return new Error(message);
+  }
 }
+
+export default Chatbot;

@@ -1,5 +1,4 @@
 
-// popup.html
 <!DOCTYPE html>
 <html>
 <head>
@@ -130,6 +129,28 @@
       color: #666;
       margin-top: 8px;
     }
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #ef9a9a;
+    }
+
+    .sources {
+      margin-top: 8px;
+      font-size: 0.9em;
+      color: #666;
+      border-top: 1px solid #eee;
+      padding-top: 8px;
+    }
+
+    .sources a {
+      color: #2196f3;
+      text-decoration: none;
+    }
+
+    .sources a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -163,7 +184,6 @@
       </div>
     </div>
   </div>
-  <script src="chatbot.js"></script>
-  <script src="popup.js"></script>
+  <script type="module" src="popup-handler.js"></script>
 </body>
 </html>
