@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Chatbot Knowledge Builder",
   "version": "1.0",
+  "description": "Build a personalized knowledge base for your chatbot",
   "permissions": [
     "contextMenus",
     "storage",
@@ -10,21 +11,28 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://huggingface.co/*"
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
   },
-  "icons": {
-    "48": "icon48.png",
-    "128": "icon128.png"
-  },
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "dist/background.js",
     "type": "module"
   },
   "action": {
-    "default_icon": "icon48.png",
-    "default_popup": "popup.html"
-  }
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "web_accessible_resources": [{
+    "resources": [
+      "dist/*",
+      "models/*"
+    ],
+    "matches": ["<all_urls>"]
+  }]
 }
