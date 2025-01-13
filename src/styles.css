@@ -1,0 +1,147 @@
+body {
+    width: 400px;
+    padding: 16px;
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  
+  .app {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  #loading {
+    text-align: center;
+    color: #666;
+  }
+  
+  /* Tab styling */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+  }
+  
+  .tab-button {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 4px;
+    color: #666;
+  }
+  
+  .tab-button:hover {
+    background: #f5f5f5;
+  }
+  
+  .tab-button.active {
+    background: #0066cc;
+    color: white;
+  }
+  
+  .tab-content {
+    display: none;
+  }
+  
+  .tab-content.active {
+    display: block;
+  }
+  
+  /* Input and chat styling */
+  .input-container {
+    display: flex;
+    gap: 8px;
+  }
+  
+  #input {
+    flex: 1;
+    min-height: 60px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    resize: vertical;
+  }
+  
+  #send {
+    padding: 8px 16px;
+    background: #0066cc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  #send:hover {
+    background: #0052a3;
+  }
+  
+  .response-container {
+    margin-top: 16px;
+    padding: 8px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+  }
+  
+  /* Knowledge base styling */
+  #knowledge-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .knowledge-item {
+    padding: 12px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    position: relative;
+  }
+  
+  .knowledge-text {
+    margin-bottom: 8px;
+  }
+  
+  .knowledge-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    color: #666;
+  }
+  
+  .knowledge-source {
+    color: #0066cc;
+    text-decoration: none;
+  }
+  
+  .knowledge-source:hover {
+    text-decoration: underline;
+  }
+  
+  .knowledge-delete {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #ff4444;
+    font-size: 1.2em;
+  }
+  
+  .knowledge-delete:hover {
+    background: #ffeeee;
+    border-radius: 4px;
+  }
+  
+  .sources {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+    font-size: 0.9em;
+    color: #666;
+  }
